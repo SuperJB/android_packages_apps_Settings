@@ -1699,4 +1699,13 @@
     <string name="help_label" msgid="1107174367904110532">"Ayuda"</string>
     <string name="cell_broadcast_settings" msgid="8415582011920085222">"Difusiones móviles"</string>
     <string name="cell_broadcast_settings_summary" msgid="3301339398950905913">"Selecciona los tipos de alertas de emergencia que quieres ver."</string>
+	<string name="quick_links_title">Ajustes avanzados</string>
+    <string name="rom_control_title">Control de ROM</string>
+    <string name="themes_title">Temas</string>
+
+    <!-- About phone screen, build date of ROM -->
+    <string name="build_date">Fecha de compilación</string>
+    <string name="build_date_default">2012-01-01-0000</string>
+    <string name="mod_version">MOD version</string>
+    <string name="mod_version_default">Desconocido</string>
 </resources>

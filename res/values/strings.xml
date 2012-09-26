@@ -4162,7 +4162,10 @@
     <string name="rom_control_title">ROM Control</string>
     <string name="themes_title">Themes</string>
 
-    <string name="mod_version">AOKP version</string>
+    <!-- About phone screen, build date of ROM -->
+    <string name="build_date">Build date</string>
+    <string name="build_date_default">2012-01-01-0000</string>
+    <string name="mod_version">MOD version</string>
     <string name="mod_version_default">Unknown</string>
     <string name="link_volume_ringtones">Link volumes</string>
     <string name="link_volume_mutes">Link mute states</string>

@@ -41,13 +41,13 @@
                     android:targetClass="com.android.settings.deviceinfo.Status" />
         </PreferenceScreen>
         
-        <!-- Anonymous statistics - (AOKPStats) -->
+        <!-- Anonymous statistics - (AOKPStats)
         <PreferenceScreen
             android:key="aokpstats"
             android:title="@string/anonymous_statistics_title"
             android:summary="@string/anonymous_statistics_summary"
             android:fragment="com.android.settings.aokpstats.AnonymousStats" >
-        </PreferenceScreen>
+        </PreferenceScreen> -->
 
         <!-- Legal Information -->
         <PreferenceScreen
@@ -169,7 +169,14 @@
         <Preference android:key="mod_version"
                 style="?android:preferenceInformationStyle"
                 android:title="@string/mod_version"
-                android:summary="@string/mod_version_default" />
+                android:summary="@string/mod_version_default"
+        		android:icon="@drawable/st_pref_mask"/>
+
+        <!-- Mod build date -->
+        <Preference android:key="build_date"
+                style="?android:preferenceInformationStyle"
+                android:title="@string/build_date"
+                android:summary="@string/build_date_default" />
 
         <!-- Detailed build version -->
         <Preference android:key="build_number" 
