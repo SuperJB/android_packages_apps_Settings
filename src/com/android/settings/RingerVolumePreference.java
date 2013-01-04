@@ -16,6 +16,10 @@
 
 package com.android.settings;
 
+import static android.os.BatteryManager.BATTERY_STATUS_UNKNOWN;
+
+import com.android.internal.telephony.TelephonyIntents;
+
 import android.app.Dialog;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;

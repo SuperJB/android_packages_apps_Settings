@@ -19,6 +19,11 @@ package com.android.settings;
 import android.app.ActivityManagerNative;
 import android.app.DialogFragment;
 import android.app.VibrationPickerDialog;
+import com.android.settings.bluetooth.DockEventReceiver;
+
+import android.app.AlertDialog;
+import android.app.Dialog;
+import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -57,6 +62,8 @@ public class SoundSettings extends SettingsPreferenceFragment implements
         Preference.OnPreferenceChangeListener {
     private static final String TAG = "SoundSettings";
 
+    private static final int DIALOG_NOT_DOCKED = 1;
+
     /** If there is no setting in the provider, use this. */
     private static final int FALLBACK_EMERGENCY_TONE_VALUE = 0;
 
@@ -79,6 +86,10 @@ public class SoundSettings extends SettingsPreferenceFragment implements
     private static final String KEY_CAMERA_SOUNDS = "camera_sounds";
     
     private static final String PROP_CAMERA_SOUND = "persist.sys.camera-sound";
+    private static final String KEY_DOCK_CATEGORY = "dock_category";
+    private static final String KEY_DOCK_AUDIO_SETTINGS = "dock_audio";
+    private static final String KEY_DOCK_SOUNDS = "dock_sounds";
+    private static final String KEY_DOCK_AUDIO_MEDIA_ENABLED = "dock_audio_media_enabled";
 
     private static final String[] NEED_VOICE_CAPABILITY = {
             KEY_RINGTONE, KEY_DTMF_TONE, KEY_CATEGORY_CALLS,
@@ -108,7 +119,7 @@ public class SoundSettings extends SettingsPreferenceFragment implements
 
     private AudioManager mAudioManager;
 
-    private BroadcastReceiver mReceiver = new BroadcastReceiver() {
+    private BroadcastReceiver mReceiverRing = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction().equals(AudioManager.RINGER_MODE_CHANGED_ACTION)) {
@@ -116,6 +127,10 @@ public class SoundSettings extends SettingsPreferenceFragment implements
             }
         }
     };
+    private Preference mDockAudioSettings;
+    private CheckBoxPreference mDockSounds;
+    private Intent mDockIntent;
+    private CheckBoxPreference mDockAudioMediaEnabled;
 
     private Handler mHandler = new Handler() {
         public void handleMessage(Message msg) {
@@ -138,6 +153,15 @@ public class SoundSettings extends SettingsPreferenceFragment implements
             case VIB_CANCEL:
             default:
                 break;
+            }
+        }
+    };
+
+    private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent.getAction().equals(Intent.ACTION_DOCK_EVENT)) {
+                handleDockChange(intent);
             }
         }
     };
@@ -221,13 +245,18 @@ public class SoundSettings extends SettingsPreferenceFragment implements
             getPreferenceScreen().removePreference(mVibrateWhenRinging);
             getPreferenceScreen().removePreference(mVibrationPreference);
             getPreferenceScreen().removePreference(mHapticFeedback);
+            removePreference(KEY_VIBRATE);
+            removePreference(KEY_HAPTIC_FEEDBACK);
+        }
+        if (!Utils.isVoiceCapable(getActivity())) {
+            removePreference(KEY_VIBRATE);
         }
 
         if (TelephonyManager.PHONE_TYPE_CDMA == activePhoneType) {
             ListPreference emergencyTonePreference =
                 (ListPreference) findPreference(KEY_EMERGENCY_TONE);
-            emergencyTonePreference.setValue(String.valueOf(Settings.System.getInt(
-                resolver, Settings.System.EMERGENCY_TONE, FALLBACK_EMERGENCY_TONE_VALUE)));
+            emergencyTonePreference.setValue(String.valueOf(Settings.Global.getInt(
+                resolver, Settings.Global.EMERGENCY_TONE, FALLBACK_EMERGENCY_TONE_VALUE)));
             emergencyTonePreference.setOnPreferenceChangeListener(this);
         }
 
@@ -269,6 +298,7 @@ public class SoundSettings extends SettingsPreferenceFragment implements
         };
 
         lookupVibrationName();
+        initDockSettings();
     }
 
     @Override
@@ -279,7 +309,9 @@ public class SoundSettings extends SettingsPreferenceFragment implements
         lookupRingtoneNames();
         lookupVibrationName();
 
-        IntentFilter filter = new IntentFilter(AudioManager.RINGER_MODE_CHANGED_ACTION);
+        IntentFilter filterRing = new IntentFilter(AudioManager.RINGER_MODE_CHANGED_ACTION);
+        getActivity().registerReceiver(mReceiverRing, filterRing);
+        IntentFilter filter = new IntentFilter(Intent.ACTION_DOCK_EVENT);
         getActivity().registerReceiver(mReceiver, filter);
     }
 
@@ -287,6 +319,7 @@ public class SoundSettings extends SettingsPreferenceFragment implements
     public void onPause() {
         super.onPause();
 
+        getActivity().unregisterReceiver(mReceiverRing);
         getActivity().unregisterReceiver(mReceiver);
     }
 
@@ -386,11 +419,40 @@ public class SoundSettings extends SettingsPreferenceFragment implements
             newFragment.show(getFragmentManager(), "dialog");
             return true;
 
+        } else if (preference == mDockAudioSettings) {
+            int dockState = mDockIntent != null
+                    ? mDockIntent.getIntExtra(Intent.EXTRA_DOCK_STATE, 0)
+                    : Intent.EXTRA_DOCK_STATE_UNDOCKED;
+
+            if (dockState == Intent.EXTRA_DOCK_STATE_UNDOCKED) {
+                showDialog(DIALOG_NOT_DOCKED);
+            } else {
+                boolean isBluetooth = mDockIntent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE) != null;
+
+                if (isBluetooth) {
+                    Intent i = new Intent(mDockIntent);
+                    i.setAction(DockEventReceiver.ACTION_DOCK_SHOW_UI);
+                    i.setClass(getActivity(), DockEventReceiver.class);
+                    getActivity().sendBroadcast(i);
+                } else {
+                    PreferenceScreen ps = (PreferenceScreen)mDockAudioSettings;
+                    Bundle extras = ps.getExtras();
+                    extras.putBoolean("checked",
+                            Settings.Global.getInt(getContentResolver(),
+                                    Settings.Global.DOCK_AUDIO_MEDIA_ENABLED, 0) == 1);
+                    super.onPreferenceTreeClick(ps, ps);
+                }
+            }
+        } else if (preference == mDockSounds) {
+            Settings.Global.putInt(getContentResolver(), Settings.Global.DOCK_SOUNDS_ENABLED,
+                    mDockSounds.isChecked() ? 1 : 0);
+        } else if (preference == mDockAudioMediaEnabled) {
+            Settings.Global.putInt(getContentResolver(), Settings.Global.DOCK_AUDIO_MEDIA_ENABLED,
+                    mDockAudioMediaEnabled.isChecked() ? 1 : 0);
         } else {
             // If we didn't handle it, let preferences handle it.
             return super.onPreferenceTreeClick(preferenceScreen, preference);
         }
-
         return true;
     }
 
@@ -399,8 +461,8 @@ public class SoundSettings extends SettingsPreferenceFragment implements
         if (KEY_EMERGENCY_TONE.equals(key)) {
             try {
                 int value = Integer.parseInt((String) objValue);
-                Settings.System.putInt(getContentResolver(),
-                        Settings.System.EMERGENCY_TONE, value);
+                Settings.Global.putInt(getContentResolver(),
+                        Settings.Global.EMERGENCY_TONE, value);
             } catch (NumberFormatException e) {
                 Log.e(TAG, "could not persist emergency tone setting", e);
             }
@@ -434,4 +496,87 @@ public class SoundSettings extends SettingsPreferenceFragment implements
         String uriString = VibrationPattern.getPhoneVibration(getActivity());
         mVibrationPreference.setSummary(new VibrationPattern(Uri.parse(uriString), getActivity()).getName());
     }
+
+    private boolean needsDockSettings() {
+        return getResources().getBoolean(R.bool.has_dock_settings);
+    }
+
+    private void initDockSettings() {
+        ContentResolver resolver = getContentResolver();
+
+        if (needsDockSettings()) {
+            mDockSounds = (CheckBoxPreference) findPreference(KEY_DOCK_SOUNDS);
+            mDockSounds.setPersistent(false);
+            mDockSounds.setChecked(Settings.Global.getInt(resolver,
+                    Settings.Global.DOCK_SOUNDS_ENABLED, 0) != 0);
+            mDockAudioSettings = findPreference(KEY_DOCK_AUDIO_SETTINGS);
+            mDockAudioSettings.setEnabled(false);
+        } else {
+            getPreferenceScreen().removePreference(findPreference(KEY_DOCK_CATEGORY));
+            getPreferenceScreen().removePreference(findPreference(KEY_DOCK_AUDIO_SETTINGS));
+            getPreferenceScreen().removePreference(findPreference(KEY_DOCK_SOUNDS));
+            Settings.Global.putInt(resolver, Settings.Global.DOCK_AUDIO_MEDIA_ENABLED, 1);
+        }
+    }
+
+    private void handleDockChange(Intent intent) {
+        if (mDockAudioSettings != null) {
+            int dockState = intent.getIntExtra(Intent.EXTRA_DOCK_STATE, 0);
+
+            boolean isBluetooth =
+                    intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE) != null;
+
+            mDockIntent = intent;
+
+            if (dockState != Intent.EXTRA_DOCK_STATE_UNDOCKED) {
+                // remove undocked dialog if currently showing.
+                try {
+                    removeDialog(DIALOG_NOT_DOCKED);
+                } catch (IllegalArgumentException iae) {
+                    // Maybe it was already dismissed
+                }
+
+                if (isBluetooth) {
+                    mDockAudioSettings.setEnabled(true);
+                } else {
+                    if (dockState == Intent.EXTRA_DOCK_STATE_LE_DESK) {
+                        ContentResolver resolver = getContentResolver();
+                        mDockAudioSettings.setEnabled(true);
+                        if (Settings.Global.getInt(resolver,
+                                Settings.Global.DOCK_AUDIO_MEDIA_ENABLED, -1) == -1) {
+                            Settings.Global.putInt(resolver,
+                                    Settings.Global.DOCK_AUDIO_MEDIA_ENABLED, 0);
+                        }
+                        mDockAudioMediaEnabled =
+                                (CheckBoxPreference) findPreference(KEY_DOCK_AUDIO_MEDIA_ENABLED);
+                        mDockAudioMediaEnabled.setPersistent(false);
+                        mDockAudioMediaEnabled.setChecked(
+                                Settings.Global.getInt(resolver,
+                                        Settings.Global.DOCK_AUDIO_MEDIA_ENABLED, 0) != 0);
+                    } else {
+                        mDockAudioSettings.setEnabled(false);
+                    }
+                }
+            } else {
+                mDockAudioSettings.setEnabled(false);
+            }
+        }
+    }
+
+    @Override
+    public Dialog onCreateDialog(int id) {
+        if (id == DIALOG_NOT_DOCKED) {
+            return createUndockedMessage();
+        }
+        return null;
+    }
+
+    private Dialog createUndockedMessage() {
+        final AlertDialog.Builder ab = new AlertDialog.Builder(getActivity());
+        ab.setTitle(R.string.dock_not_found_title);
+        ab.setMessage(R.string.dock_not_found_text);
+        ab.setPositiveButton(android.R.string.ok, null);
+        return ab.create();
+    }
 }
+
